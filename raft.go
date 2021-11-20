@@ -3,6 +3,7 @@ package sgcache
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"math/rand"
 	"net"
 
@@ -33,6 +34,7 @@ type node struct {
 	IpPool                map[int]string //所有节点的ip
 }
 
+//判断节点是否为Leader
 func (n *node) isLeader() bool {
 	if n.nodeState == 0 {
 		return true
@@ -40,6 +42,7 @@ func (n *node) isLeader() bool {
 	return false
 }
 
+//判断节点是否为Candidate
 func (n *node) isCandidate() bool {
 	if n.nodeState == 1 {
 		return true
@@ -47,6 +50,7 @@ func (n *node) isCandidate() bool {
 	return false
 }
 
+//判断节点是否为Follower
 func (n *node) isFollower() bool {
 	if n.nodeState == 2 {
 		return true
@@ -54,10 +58,7 @@ func (n *node) isFollower() bool {
 	return false
 }
 
-func (n *node) waitForHeart() {
-	//TODO
-}
-
+//发送消息给其他节点,参数为接收者的编号
 func (n *node) send(recvIndex int, msg *raftlog) error {
 	var conn net.Conn
 	var err error
@@ -69,55 +70,36 @@ func (n *node) send(recvIndex int, msg *raftlog) error {
 	if err != nil {
 		return err
 	}
-	switch msg.logType {
-	case justHeartBeat:
-		err = n.sendHeartBeatToOneNode(conn, recvIndex, msg)
-	}
+	_, err = conn.Write(msg.tobytes())
 	return err
 }
 
-func (n *node) sendHeartBeatToOneNode(conn net.Conn, recvIndex int, msg *raftlog) error {
+/*
+func (n *node) sendHeartBeatToOneNode(recvIndex int) error {
 	if n.nodeState != leader {
 		err := fmt.Errorf("Error: Node is not a leader")
 		return err
 	}
-	_, err := conn.Write(msg.tobytes())
+	msg := n.heartbeatlog(recvIndex)
+	n.send(recvIndex , msg)
 	return err
-}
+}*/
 
+//向所有节点发出心跳
 func (n *node) sendHeartBeatToAllNode() error {
 	var err error
-	for recvIndex, ip := range n.IpPool {
-		go func(recvIndex int, ip string) {
-			err := n.send(recvIndex, heartbeatlog(n.term, n.index, recvIndex))
+	for recvIndex, _ := range n.IpPool {
+		go func(recvIndex int) {
+			err := n.send(recvIndex, n.heartbeatlog(recvIndex))
 			if err != nil {
 				err = err
 			}
-		}(recvIndex, ip)
+		}(recvIndex)
 	}
 	return err
 }
 
-func heartbeatlog(term int, senderIndex int, recvIndex int) *raftlog {
-	log := raftlog{
-		term:             term,
-		logType:          justHeartBeat,
-		LogSenderIndex:   senderIndex,
-		LogReceiverIndex: recvIndex,
-	}
-	return &log
-}
-
-func (n *node) Step() error {
-	if n.isLeader() == true {
-		for {
-			n.sendHeartBeat()
-			//TODO : time.wait(100ms)
-		}
-	}
-
-}
-
+//初始化节点
 func InitNode() *node {
 	sourseNum := int64(time.Now().Nanosecond())
 	sourse := rand.NewSource(sourseNum)
@@ -130,6 +112,7 @@ func InitNode() *node {
 	return n
 }
 
+//节点开始接收信息
 func (n *node) Accept() error {
 	listener, err := net.Listen("tcp", ":2803")
 	if err != nil {
@@ -144,6 +127,7 @@ func (n *node) Accept() error {
 	}
 }
 
+//处理链接,并根据消息类型回复
 func serveConn(conn net.Conn, n *node) {
 	req := bufio.NewReader(conn)
 	msgBytes := make([]byte, 40)
@@ -162,6 +146,9 @@ func serveConn(conn net.Conn, n *node) {
 	return
 }
 
+//消息处理
+
+//处理简单心跳
 func (n *node) handlejustHeartBeat(msg *raftlog) {
 	if msg.logType != justHeartBeat {
 		panic("something wrong with message")
@@ -170,15 +157,21 @@ func (n *node) handlejustHeartBeat(msg *raftlog) {
 		n.timeDurationFromHeart = 0
 	} else if n.term < msg.term {
 		n.term = msg.term
+	} else {
+		//TODO tell leader to be sender
 	}
 	return
 }
 
+//处理受到被要求去投票的请求
 func (n *node) handleGetVoted(msg *raftlog) {
 	if msg.logType != getVoted {
 		panic("something wrong with message")
 	}
 	if n.hasVote == true {
+		return
+	}
+	if msg.index < n.nodelogs[len(n.nodelogs)-1].index {
 		return
 	}
 	_ = n.send(msg.LogSenderIndex, &raftlog{
@@ -187,12 +180,15 @@ func (n *node) handleGetVoted(msg *raftlog) {
 		LogSenderIndex:   n.index,
 		LogReceiverIndex: msg.LogSenderIndex,
 	})
+	n.hasVote = true
 }
 
+//处理心跳和msg
 func (n *node) handleMsgAndHeartBeat(msg *raftlog) {
 	//TODO
 }
 
+//处理受到的投票
 func (n *node) handleVoteToOther(msg *raftlog) {
 	if msg.logType != voteToOther {
 		panic("Something wrong with message")
@@ -203,14 +199,59 @@ func (n *node) handleVoteToOther(msg *raftlog) {
 	}
 }
 
+//节点状态转化
+
+//节点转化为Leader,并开始发送心跳
 func (n *node) beLeader() {
-	//TODO
+	if n.nodeState != candidate {
+		panic("nodeState error")
+	}
+	n.nodeState = leader
+	n.sendHeartBeat()
 }
 
+//节点变为follower
 func (n *node) beFollower() {
-	//TODO
+	n.nodeState = follower
 }
 
+//节点变为candidate
 func (n *node) beCandidate() {
-	//TODO
+	n.nodeState = candidate
+	n.term++
+	n.sendVotedToAll()
+
+}
+
+//发送消息
+
+//发送心跳
+func (n *node) sendHeartBeat() {
+	go func() {
+		for {
+			err := n.sendHeartBeatToAllNode()
+			if err != nil {
+				log.Println(err)
+			}
+			time.Sleep(time.Nanosecond * 150)
+			if n.nodeState != leader {
+				return
+			}
+		}
+	}()
+
+}
+
+//想所有人发送被选举请求
+func (n *node) sendVotedToAll() error {
+	var err error
+	for recvIndex, _ := range n.IpPool {
+		go func(recvIndex int) {
+			err := n.send(recvIndex, n.getVotedlog(recvIndex))
+			if err != nil {
+				err = err
+			}
+		}(recvIndex)
+	}
+	return err
 }

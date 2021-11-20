@@ -20,12 +20,14 @@ type raftlog struct {
 	LogReceiverIndex int    //接受节点索引
 }
 
+//消息序列化中间结构体,模拟byte切片底层
 type sliceMock struct {
 	addr uintptr
 	len  int
 	cap  int
 }
 
+//反序列化为字节切片
 func (r *raftlog) tobytes() []byte {
 	len := unsafe.Sizeof(*r)
 	bytes := &sliceMock{
@@ -37,7 +39,31 @@ func (r *raftlog) tobytes() []byte {
 	return data
 }
 
+//序列化为日志
 func toRaftlog(bytes []byte) raftlog {
 	newlog := (**raftlog)(unsafe.Pointer(&bytes))
 	return **newlog
+}
+
+//创建心跳日志
+func (n *node) heartbeatlog(recv int) *raftlog {
+	log := raftlog{
+		term:             n.term,
+		logType:          justHeartBeat,
+		LogSenderIndex:   n.index,
+		LogReceiverIndex: recv,
+	}
+	return &log
+}
+
+//创建请求被选举的日志
+func (n *node) getVotedlog(recv int) *raftlog {
+	log := &raftlog{
+		term:             n.term,
+		logType:          getVoted,
+		index:            n.nodelogs[len(n.nodelogs)-1].index,
+		LogSenderIndex:   n.index,
+		LogReceiverIndex: recv,
+	}
+	return log
 }
