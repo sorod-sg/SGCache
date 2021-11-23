@@ -100,14 +100,24 @@ func (n *node) sendHeartBeatToAllNode() error {
 }
 
 //初始化节点
-func InitNode() *node {
+func InitNode(index int, numOfAllNode int, LeaderIp string, NodeIP string, IpPool map[int]string, maxBytes int64) *node {
 	sourseNum := int64(time.Now().Nanosecond())
 	sourse := rand.NewSource(sourseNum)
 	randSeed := rand.New(sourse)
 	n := &node{
-		nodeState:       follower,
-		nodelogs:        make([]raftlog, 0),
-		timeToCandidate: time.Duration(randSeed.Int31n(150) + 100),
+		index:     index,
+		nodeState: follower,
+		nodecache: cache{
+			lru:        InitLRUqueen(maxBytes),
+			cacheBytes: maxBytes,
+		},
+		nodelogs:              make([]raftlog, 0),
+		timeToCandidate:       time.Duration(randSeed.Int31n(150) + 100),
+		timeDurationFromHeart: 0,
+		numOfAllNode:          numOfAllNode,
+		LeaderIp:              LeaderIp,
+		NodeIp:                NodeIP,
+		IpPool:                IpPool,
 	}
 	return n
 }
@@ -136,13 +146,18 @@ func serveConn(conn net.Conn, n *node) {
 	switch msg.logType {
 	case justHeartBeat:
 		n.handlejustHeartBeat(&msg)
+	case voteToOther:
+		n.handleVoteToOther(&msg)
 	case getVoted:
 		n.handleGetVoted(&msg)
 	case msgAndHeartBeat:
 		n.handleMsgAndHeartBeat(&msg)
-	case voteToOther:
-		n.handleVoteToOther(&msg)
+	case clientGet:
+		n.handleClientGet(&msg)
+	case clientAddNode:
+		n.handleAddNode(&msg)
 	}
+	conn.Close()
 	return
 }
 
@@ -199,6 +214,14 @@ func (n *node) handleVoteToOther(msg *raftlog) {
 	}
 }
 
+func (n *node) handleClientGet(msg *raftlog) {
+	//TODO
+}
+
+func (n *node) handleAddNode(msg *raftlog) {
+	//TODO
+}
+
 //节点状态转化
 
 //节点转化为Leader,并开始发送心跳
@@ -242,7 +265,7 @@ func (n *node) sendHeartBeat() {
 
 }
 
-//想所有人发送被选举请求
+//向所有人发送被选举请求
 func (n *node) sendVotedToAll() error {
 	var err error
 	for recvIndex, _ := range n.IpPool {

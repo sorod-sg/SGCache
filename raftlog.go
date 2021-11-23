@@ -9,6 +9,8 @@ const (
 	voteToOther            //发送选票
 	getVoted               //给别的节点发起得到选票的请求
 	msgAndHeartBeat        //心跳和事务
+	clientGet
+	clientAddNode
 )
 
 type raftlog struct {
@@ -64,6 +66,22 @@ func (n *node) getVotedlog(recv int) *raftlog {
 		index:            n.nodelogs[len(n.nodelogs)-1].index,
 		LogSenderIndex:   n.index,
 		LogReceiverIndex: recv,
+	}
+	return log
+}
+
+func ClientGet(key string) *raftlog {
+	log := &raftlog{
+		logType: clientGet,
+		msg:     key,
+	}
+	return log
+}
+
+func ClientAddNode(nodeip string) *raftlog {
+	log := &raftlog{
+		logType: clientAddNode,
+		msg:     nodeip,
 	}
 	return log
 }

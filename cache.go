@@ -15,7 +15,7 @@ func (c *cache) add(key string, value ByteView) {
 	return
 }
 
-func (c *cache) get(key string) (value ByteView, isExist bool) {
+func (c *cache) Get(key string) (value ByteView, isExist bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	valueInterface, ok := c.lru.Get(key)

@@ -52,7 +52,7 @@ func (g *Group) Get(key string) (ByteView, error) {
 	if key == "" {
 		return ByteView{}, fmt.Errorf("key is required")
 	}
-	if v, ok := g.mainCache.get(key); ok {
+	if v, ok := g.mainCache.Get(key); ok {
 		return v, nil
 	}
 	return g.load(key)
