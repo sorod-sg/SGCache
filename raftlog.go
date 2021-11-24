@@ -1,16 +1,20 @@
 package sgcache
 
 import (
+	"fmt"
 	"unsafe"
 )
 
 const (
-	justHeartBeat   = iota //只有心跳
-	voteToOther            //发送选票
-	getVoted               //给别的节点发起得到选票的请求
-	msgAndHeartBeat        //心跳和事务
-	clientGet
-	clientAddNode
+	justHeartBeat      = iota //只有心跳
+	voteToOther               //发送选票
+	getVoted                  //给别的节点发起得到选票的请求
+	addNode                   //节点发送给节点,向ip表中增加新的节点
+	done                      //表示事务已经完成
+	clientGet                 //客户端的Get请求
+	clientAddNode             //客户端的增加节点请求
+	replyClientGet            //回复客户端的Get请求
+	replyClientAddNode        //回复客户端的增加节点请求
 )
 
 type raftlog struct {
@@ -70,6 +74,28 @@ func (n *node) getVotedlog(recv int) *raftlog {
 	return log
 }
 
+func (n *node) addNodelog(recv int) *raftlog {
+	log := &raftlog{
+		term:             n.term,
+		logType:          addNode,
+		index:            n.nodelogs[len(n.nodelogs)-1].index,
+		LogSenderIndex:   n.index,
+		LogReceiverIndex: recv,
+	}
+	return log
+}
+
+func (n *node) donelog(recv int) *raftlog {
+	log := &raftlog{
+		term:             n.term,
+		logType:          done,
+		index:            n.nodelogs[len(n.nodelogs)-1].index,
+		LogSenderIndex:   n.index,
+		LogReceiverIndex: recv,
+	}
+	return log
+}
+
 func ClientGet(key string) *raftlog {
 	log := &raftlog{
 		logType: clientGet,
@@ -78,10 +104,22 @@ func ClientGet(key string) *raftlog {
 	return log
 }
 
-func ClientAddNode(nodeip string) *raftlog {
+func ClientAddNode(nodeIp []string) *raftlog {
+	var msg string
+	for _, oneNodeIp := range nodeIp {
+		msg = msg + oneNodeIp + " "
+	}
 	log := &raftlog{
 		logType: clientAddNode,
-		msg:     nodeip,
+		msg:     msg,
+	}
+	return log
+}
+
+func ReplyClientGET(clientIp string, msg *string, isExist bool) *raftlog {
+	log := &raftlog{
+		logType: replyClientGet,
+		msg:     fmt.Sprintln(*msg, "-", isExist),
 	}
 	return log
 }

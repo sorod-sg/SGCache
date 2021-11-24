@@ -93,6 +93,7 @@ func (q *LRUqueen) Get(key string) (value interface{}, isExist bool) {
 		return
 	}
 }
+
 func (q *LRUqueen) Delete(key string) {
 	if ele, ok := q.cache[key]; ok {
 		q.list.Remove(ele)

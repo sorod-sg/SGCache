@@ -34,12 +34,12 @@ func InitClient(ConnectTimeOut time.Duration) *client {
 	}
 }
 
-func (c *client) addNode(nodeIp string) (err error) {
-	c.IpPool = append(c.IpPool, nodeIp)
-	if c.LeaderIp == "" {
-		c.LeaderIp = nodeIp
-	}
+func (c *client) addNode(nodeIp []string) (err error) {
+	c.IpPool = append(c.IpPool, nodeIp...)
 	for i := 1; i < 10; i++ {
+		if c.LeaderIp == "" {
+			c.LeaderIp = c.IpPool[i-1]
+		}
 		err = c.sendMsgNodeAdd(nodeIp)
 		if err == nil || err != fmt.Errorf("Timeout") {
 			break
@@ -51,10 +51,13 @@ func (c *client) addNode(nodeIp string) (err error) {
 	return err
 }
 
-func (c *client) sendMsgNodeAdd(nodeIp string) error {
-	sendMSg := ClientAddNode(nodeIp)
+func (c *client) sendMsgNodeAdd(nodeIp []string) error {
+	sendMsg := ClientAddNode(nodeIp)
 	recvMsg := &raftlog{}
-	err := c.send(nodeIp, sendMSg, recvMsg)
+	err := c.send(c.LeaderIp, sendMsg, recvMsg)
+	if recvMsg.logType != replyClientAddNode {
+		return fmt.Errorf("reply log error")
+	}
 	return err
 }
 

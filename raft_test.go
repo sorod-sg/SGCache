@@ -1,6 +1,8 @@
 package sgcache
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestRaftlogTobytes(t *testing.T) {
 	a := raftlog{
@@ -13,7 +15,7 @@ func TestRaftlogTobytes(t *testing.T) {
 	}
 }
 
-func TestNodoTobeLeader(t *testing.T) {
+/*func TestNodoTobeLeader(t *testing.T) {
 	aNode := InitNode()
 	bNode := InitNode()
 	cNode := InitNode()
@@ -27,4 +29,13 @@ func TestNodoTobeLeader(t *testing.T) {
 	aNode.beCandidate()
 	aNode.beLeader()
 
+}*/
+
+func TestString(t *testing.T) {
+	a := make([]string, 5, 5)
+	a = append(a, "123")
+	//log.Println(a)
+	if a[0] != "" {
+		t.Errorf("error")
+	}
 }
