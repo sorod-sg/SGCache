@@ -2,7 +2,9 @@ package sgcache
 
 import (
 	//"bufio"
+	"bytes"
 	"fmt"
+	"log"
 	"sync"
 )
 
@@ -20,6 +22,7 @@ type Group struct {
 	name      string //组名称
 	mainCache cache  //主缓存
 	getter    Getter //回调函数,获取未命中的值
+	peers     PeerPicker
 }
 
 var (
@@ -41,6 +44,33 @@ func NewGroup(name string, cacheSize int64, getter Getter) *Group {
 	return g
 }
 
+func (g *Group) RegisterPeers(peers PeerPicker) {
+	if g.peers != nil {
+		panic("RegisterPeerPicker called more than once")
+	}
+	g.peers = peers
+}
+
+func (g *Group) load(key string) (value ByteView, err error) {
+	if g.peers != nil {
+		if peer, ok := g.peers.PickPeer(key); ok {
+			if value, err = g.getFromPeer(peer, key); err == nil {
+				return value, nil
+			}
+			log.Println("[SGCache] Failed to get from peer", err)
+		}
+	}
+	return g.getLocally(key)
+}
+
+func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	bytes, err := peer.Get(g.name, key)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: bytes}, nil
+}
+
 func GetGroup(name string) *Group {
 	mu.RLock()
 	defer mu.RUnlock()
@@ -56,11 +86,6 @@ func (g *Group) Get(key string) (ByteView, error) {
 		return v, nil
 	}
 	return g.load(key)
-}
-
-func (g *Group) load(key string) (ByteView, error) {
-	value, err := g.getLocally(key)
-	return value, err
 }
 
 func (g *Group) getLocally(key string) (ByteView, error) {

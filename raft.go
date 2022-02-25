@@ -18,6 +18,10 @@ const (
 	follower         //节点为follower
 )
 
+type sender interface {
+	send()
+}
+
 type node struct {
 	index                 int           //节点的编号
 	nodeState             int16         //节点的状态
@@ -73,6 +77,7 @@ func (n *node) addNodeLog(newLog *raftlog) {
 //发送消息给其他节点,参数为接收者的编号
 func (n *node) sendToNode(recvIndex int, msg *raftlog) error {
 	var conn net.Conn
+	defer conn.Close()
 	var err error
 	if ip := n.IpPool[recvIndex]; ip != "" {
 		return fmt.Errorf("ipPool error")
@@ -88,6 +93,7 @@ func (n *node) sendToNode(recvIndex int, msg *raftlog) error {
 
 func (n *node) sendToClient(msg *raftlog) error {
 	conn, err := net.Dial("tcp", n.clientIp)
+	defer conn.Close()
 	if err != nil {
 		return err
 	}
@@ -123,7 +129,20 @@ func (n *node) sendAddNodeToAllNode() error {
 	return err
 }
 
-//TODO 封装一个sendToAll,重写所有的森的ToAll相关方法
+//TODO 封装一个sendToAll,重写所有的SendToAll相关方法
+
+func (n *node) sendToAll(msg *raftlog) error {
+	var err error
+	for recvIndex, _ := range n.IpPool {
+		go func(recvIndex int) {
+			err := n.sendToNode(recvIndex, msg)
+			if err != nil {
+				err = err
+			}
+		}(recvIndex)
+	}
+	return err
+}
 
 func (n *node) sendDoneToLeader(msg *raftlog) error {
 
@@ -212,6 +231,7 @@ func (n *node) handlejustHeartBeat(msg *raftlog) {
 		}
 	} else {
 		//TODO tell leader to be sender
+
 	}
 	return
 }
